@@ -5,97 +5,45 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Follow Up · Ágil Aduaneira</title>
 
-<!-- ════════════════════════════════════════════════════════════
-     FIREBASE — Auth guard (bloqueia a página até validar sessão)
-════════════════════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════
+     FIREBASE — Auth + Firestore (tempo real, multiusuário)
+═══════════════════════════════════════════════════════ -->
 <script type="module">
-import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp }    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, onAuthStateChanged, signOut }
-                                   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, collection, doc, onSnapshot,
-         setDoc, deleteDoc, getDoc }
-                                   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+                             from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc }
+                             from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ============================================================
-// 🔧 const firebaseConfig = {
-  apiKey: "AIzaSyDAXMU7aK_PdlMfGdvjbG5zM8SuybVu1mc",
-  authDomain: "follow-up-agil.firebaseapp.com",
-  projectId: "follow-up-agil",
-  storageBucket: "follow-up-agil.firebasestorage.app",
-  messagingSenderId: "35704752799",
-  appId: "1:35704752799:web:5adb5429bb9a039505f0aa"
-};
-//    (os mesmos que estão no login.html)
-// ============================================================
 const firebaseConfig = {
-  apiKey:            "AIzaSyDAXMU7aK_PdlMfGdvjbG5zM8SuybVu1mc",
+  apiKey:            "AIzaSyDAXMU7aK_Pd1MfGdvjbG5zM8SuybVu1mc",
   authDomain:        "follow-up-agil.firebaseapp.com",
   projectId:         "follow-up-agil",
   storageBucket:     "follow-up-agil.firebasestorage.app",
   messagingSenderId: "35704752799",
   appId:             "1:35704752799:web:5adb5429bb9a039505f0aa"
 };
-// ============================================================
 
 const app  = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
-// Coluna Firestore que guarda os processos
-const PROCS_COL = 'processos';
-
-// ── Guard: usuário não logado → login.html ─────────────────
 onAuthStateChanged(auth, user => {
-  if (!user) {
-    window.location.href = 'login.html';
-    return;
-  }
-  // Exibe e-mail do usuário no header
-  const el = document.getElementById('hdr-user');
+  if (!user) { window.location.href = "login.html"; return; }
+  const el = document.getElementById("hdr-user");
   if (el) el.textContent = user.email;
-
-  // Expõe funções de Firestore para o código legado abaixo
-  window._fbUser = user;
-  window._fbDb   = db;
-  window._fbProcCol = PROCS_COL;
-  window._fbSignOut = () => signOut(auth).then(() => { window.location.href = 'login.html'; });
-
-  // Inicia listener em tempo real
-  window._startFirestoreSync();
-});
-
-// ── Listener em tempo real ─────────────────────────────────
-window._startFirestoreSync = function() {
-  const col = collection(db, PROCS_COL);
-  onSnapshot(col, snapshot => {
-    // Reconstrói o array de processos a partir do Firestore
+  window._fbSignOut    = () => signOut(auth).then(() => { window.location.href = "login.html"; });
+  window._fbSaveProc   = p  => setDoc(doc(db, "processos", String(p.id)), p);
+  window._fbDeleteProc = id => deleteDoc(doc(db, "processos", String(id)));
+  onSnapshot(collection(db, "processos"), snap => {
     const fsProcs = [];
-    snapshot.forEach(d => fsProcs.push(d.data()));
-    // Ordena por id para manter consistência
-    fsProcs.sort((a,b) => (a.id||0) - (b.id||0));
-
-    // Atualiza o estado local (sem re-disparar save para o Firestore)
-    window._syncingFromFirestore = true;
+    snap.forEach(d => fsProcs.push(d.data()));
+    fsProcs.sort((a, b) => (a.id || 0) - (b.id || 0));
     procs = fsProcs;
-    // Calcula nextId
-    if (procs.length) nextId = Math.max(...procs.map(p=>p.id||0)) + 1;
-    window._syncingFromFirestore = false;
-
-    populateSelects();
-    renderThead();
-    render();
+    if (procs.length) nextId = Math.max(...procs.map(p => p.id || 0)) + 1;
+    populateSelects(); renderThead(); render();
   });
-};
-
-// ── save() sobrescrito → persiste no Firestore ─────────────
-// Chamado após qualquer criação/edição/exclusão de processo
-window._fbSaveProc = async function(proc) {
-  if (!proc || !proc.id) return;
-  await setDoc(doc(db, PROCS_COL, String(proc.id)), proc);
-};
-window._fbDeleteProc = async function(id) {
-  await deleteDoc(doc(db, PROCS_COL, String(id)));
-};
+});
 </script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -469,23 +417,21 @@ thead th .col-label { padding-left:4px; }
       <button class="mtab" id="mtab-aer" onclick="switchModal('aer')">✈ Aéreo</button>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:12px">
+  <div style="display:flex;align-items:center;gap:10px">
     <button class="btn-cadastros" onclick="openCadastros()">
       <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       Cadastros
     </button>
-    <div style="display:flex;align-items:center;gap:8px">
-      <span id="hdr-user" style="font-size:11px;color:rgba(255,255,255,.5);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-      <button onclick="if(window._fbSignOut){window._fbSignOut()}else{window.location.href='login.html'}" title="Sair"
-        style="height:28px;padding:0 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
-        border-radius:6px;color:rgba(255,255,255,.75);font-size:11px;font-weight:600;cursor:pointer;
-        display:flex;align-items:center;gap:5px;white-space:nowrap;transition:background .15s"
-        onmouseover="this.style.background='rgba(255,255,255,.2)'"
-        onmouseout="this.style.background='rgba(255,255,255,.1)'">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        Sair
-      </button>
-    </div>
+    <span id="hdr-user" style="font-size:10.5px;color:rgba(255,255,255,.45);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button onclick="if(window._fbSignOut)window._fbSignOut()" title="Sair da conta"
+      style="height:26px;padding:0 10px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+      border-radius:5px;color:rgba(255,255,255,.75);font-size:11px;font-weight:600;cursor:pointer;
+      display:flex;align-items:center;gap:5px;white-space:nowrap;transition:background .15s"
+      onmouseover="this.style.background='rgba(255,255,255,.22)'"
+      onmouseout="this.style.background='rgba(255,255,255,.1)'">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sair
+    </button>
     <div class="hdr-date" id="hdr-date"></div>
   </div>
 </header>
@@ -624,9 +570,7 @@ let currentTab = 'ativos', currentModal = 'mar', editingId = null;
 //  PERSISTENCE
 // ═══════════════════════════════════════════════════════════════
 function load() {
-  // Processos são carregados via Firestore onSnapshot (tempo real).
-  // O SEED é usado apenas como fallback local para desenvolvimento sem Firebase.
-  // Quando o onSnapshot disparar, ele substituirá procs pelo conteúdo do Firestore.
+  // Processos carregados em tempo real via onSnapshot do Firestore.
   procs = []; nextId = 200;
   try {
     const imp = localStorage.getItem(STORAGE_IMP);
@@ -640,9 +584,7 @@ function load() {
   } catch(e) { importadores = []; }
 }
 function save() {
-  // Processos agora são gerenciados pelo Firestore.
-  // Esta função é mantida para compatibilidade mas não persiste no localStorage.
-  // A escrita real acontece em saveProc() / delProc() via _fbSaveProc/_fbDeleteProc.
+  // Processos persistidos no Firestore via _fbSaveProc/_fbDeleteProc
 }
 function saveImportadores() {
   try { localStorage.setItem(STORAGE_IMP, JSON.stringify(importadores)); } catch(e){}
@@ -925,58 +867,27 @@ function openDetail(id) {
     <div class="di"><div class="dl">HBL</div><div class="dv">${fv(p.hbl)}</div></div>
     <div class="di" style="grid-column:1/-1">
       <div class="dl">CE Mercante</div>
-      <div class="dv" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span>${fv(p.ceMercante)}</span>
-        ${p.ceMercante ? `
-        <a class="btn-gov btn-gov-siscomex" target="_blank" title="Consultar no Siscomex Carga"
-          href="https://www4c.receita.fazenda.gov.br/carga-web/ConsultarCargaConsignatarioMenu.do">
-          🔍 Siscomex Carga
-        </a>
-        <a class="btn-gov btn-gov-mercante" target="_blank" title="Consultar no Mercante"
-          href="https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27">
-          🚢 Mercante
-        </a>` : ''}
-      </div>
+      <div class="dv">${fv(p.ceMercante)}</div>
     </div>
     <div class="di"><div class="dl">Consolidado</div><div class="dv">${fv(p.consolidado)}</div></div>
     <div class="di full"><div class="dl">Containers</div><div class="dv">${fv(p.containers)}</div></div>
 
-    <!-- GOV SHORTCUT LINKS -->
     <div class="dsec">Consultas Governamentais</div>
     <div style="grid-column:1/-1">
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px">
-
-        <!-- Siscomex Carga - CE Mercante -->
         <a class="btn-gov btn-gov-siscomex" target="_blank"
-          href="https://www4c.receita.fazenda.gov.br/carga-web/ConsultarCargaConsignatarioMenu.do"
-          title="Consultar CE-Mercante no Siscomex Carga">
+          href="https://www4c.receita.fazenda.gov.br/carga-web/ConsultarCargaConsignatarioMenu.do">
           🔍 Siscomex Carga — CE Mercante
         </a>
-
-        <!-- Mercante -->
         <a class="btn-gov btn-gov-mercante" target="_blank"
-          href="https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27"
-          title="Acessar sistema Mercante">
+          href="https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27">
           🚢 Mercante — Consulta BL/CE
         </a>
-
-        <!-- DUIMP / DI no SISCOMEX -->
-        ${p.di ? `<a class="btn-gov btn-gov-duimp" target="_blank"
-          href="https://portalunico.siscomex.gov.br/portal/"
-          title="Consultar DI/DUIMP">
-          📋 Consultar DI/DUIMP
-        </a>` : ''}
-
-        <!-- Rastreamento Armador -->
-        ${trackingURL(p) ? `<a class="btn-gov btn-track" target="_blank"
-          href="${trackingURL(p)}"
-          title="Rastrear container no armador">
-          📦 Rastrear no Armador (${p.cia||'CIA'})
-        </a>` : ''}
-
+        ${ p.di ? '<a class="btn-gov btn-gov-duimp" target="_blank" href="https://www4.receita.fazenda.gov.br/duimp/index.html">📋 Consultar DI/DUIMP</a>' : '' }
+        ${ trackingURL(p) ? '<a class="btn-gov btn-track" target="_blank" href="' + trackingURL(p) + '">📦 Rastrear no Armador (' + (p.cia||'CIA') + ')</a>' : '' }
       </div>
       <div style="font-size:10px;color:var(--g400);margin-top:6px">
-        ⚠ Esses links abrem os sistemas do governo em nova aba. O login com certificado digital deve ser feito manualmente no site aberto.
+        ⚠ Esses links abrem em nova aba. O login com certificado digital é feito manualmente no site do governo.
       </div>
     </div>
 
@@ -1219,10 +1130,7 @@ function saveProc() {
     procToSave = obj;
   }
   document.removeEventListener('click', acOutside);
-
-  // Persiste no Firestore (tempo real — todos verão automaticamente)
   if (window._fbSaveProc) window._fbSaveProc(procToSave);
-
   closeModal(); populateSelects(); render();
   showToast('✓ Processo salvo com sucesso!');
 }
@@ -1230,10 +1138,7 @@ function saveProc() {
 function delProc(id) {
   if (!confirm('Excluir este processo? Esta ação não pode ser desfeita.')) return;
   procs = procs.filter(x=>x.id!==id);
-
-  // Remove do Firestore (todos verão o processo desaparecer em tempo real)
   if (window._fbDeleteProc) window._fbDeleteProc(id);
-
   closeModal(); populateSelects(); render();
   showToast('Processo excluído.');
 }
@@ -1326,19 +1231,29 @@ function renderCadBody() {
       <p style="font-size:11px;color:var(--g400);margin-bottom:10px">
         Cadastre aqui os importadores. Eles aparecerão como sugestão no campo "Importador" do processo.
       </p>
-      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:10px">
-        <input id="cad-imp-nome" placeholder="Nome do importador..." style="height:34px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r8);font-size:12px;outline:none"
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+        <input id="cad-imp-nome" placeholder="Nome completo do importador..." 
+          style="width:100%;height:34px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r8);font-size:12px;outline:none"
           onkeydown="if(event.key==='Enter')document.getElementById('cad-imp-cnpj').focus()">
-        <input id="cad-imp-cnpj" placeholder="CNPJ (opcional)" style="height:34px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r8);font-size:12px;outline:none"
-          onkeydown="if(event.key==='Enter')cadAddImp()">
-        <button class="btn-cad-add" onclick="cadAddImp()">+ Adicionar</button>
+        <div style="display:flex;gap:8px">
+          <input id="cad-imp-cnpj" placeholder="CNPJ (opcional)" 
+            style="flex:1;height:34px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r8);font-size:12px;outline:none"
+            onkeydown="if(event.key==='Enter')cadAddImp()">
+          <button class="btn-cad-add" onclick="cadAddImp()">+ Adicionar</button>
+        </div>
       </div>
       <div class="cad-list">
         ${importadores.length ? importadores.map((imp,i) => `
           <div class="cad-item" style="align-items:flex-start">
             <div style="flex:1">
               <div class="cad-item-name">${imp.nome}</div>
-              ${imp.cnpj?`<div class="cad-item-sub">CNPJ: ${imp.cnpj}</div>`:'<div class="cad-item-sub" style="color:var(--g300)">CNPJ não informado</div>'}
+              ${imp.cnpj
+                ? `<div class="cad-item-sub">CNPJ: ${imp.cnpj}
+                    <button onclick="cadEditCNPJ(${i})" style="margin-left:6px;font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0">✏ editar</button>
+                   </div>`
+                : `<div class="cad-item-sub" style="color:var(--amber)">CNPJ não informado
+                    <button onclick="cadEditCNPJ(${i})" style="margin-left:6px;font-size:10px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0">+ informar</button>
+                   </div>`}
             </div>
             <button class="btn-cad-del" onclick="cadDelImp(${i})" title="Remover">×</button>
           </div>`).join('') : '<div class="cad-empty">Nenhum importador cadastrado.<br>Adicione acima.</div>'}
@@ -1398,13 +1313,35 @@ function getArmadorURL(cia) {
   return null;
 }
 
+
+function cadEditCNPJ(i) {
+  const imp = importadores[i];
+  const novo = prompt('CNPJ para "' + imp.nome + '":', imp.cnpj || '');
+  if (novo === null) return; // cancelled
+  importadores[i].cnpj = novo.trim();
+  saveImportadores();
+  renderCadBody();
+  populateSelects();
+  showToast('✓ CNPJ atualizado!');
+}
+
 function cadAddImp() {
   const nomeEl = document.getElementById('cad-imp-nome');
   const cnpjEl = document.getElementById('cad-imp-cnpj');
   const nome = (nomeEl.value||'').trim();
   const cnpj = (cnpjEl.value||'').trim();
   if (!nome) { nomeEl.focus(); showToast('Informe o nome do importador.'); return; }
-  if (importadores.find(i => i.nome === nome)) { showToast('Importador já cadastrado.'); return; }
+  // Check duplicate: by CNPJ (if provided) or by exact name
+  const dupByCNPJ = cnpj && importadores.find(i => i.cnpj && i.cnpj === cnpj);
+  const dupByName = importadores.find(i => i.nome.toLowerCase() === nome.toLowerCase());
+  if (dupByCNPJ) {
+    showToast('⚠ CNPJ já cadastrado para: ' + dupByCNPJ.nome);
+    return;
+  }
+  if (dupByName) {
+    showToast('⚠ Importador com esse nome já cadastrado.');
+    return;
+  }
   addImportador(nome, cnpj);
   nomeEl.value = ''; cnpjEl.value = '';
   renderCadBody(); populateSelects(); showToast('✓ Importador adicionado!');
@@ -1630,59 +1567,6 @@ function rulesReset() {
 //  COLUMN SYSTEM
 // ═══════════════════════════════════════════════════════════════
 const STORAGE_COLS = 'agil_cols_v1';
-const STORAGE_CUSTOM_COLS = 'agil_custom_cols_v1';
-
-let customCols = [];
-
-function loadCustomCols() {
-  try {
-    const s = localStorage.getItem(STORAGE_CUSTOM_COLS);
-    customCols = s ? JSON.parse(s) : [];
-  } catch(e) { customCols = []; }
-  // Register them into ALL_COLS if not already there
-  customCols.forEach(cc => {
-    if (!ALL_COLS.find(c => c.id === cc.id)) {
-      ALL_COLS.push({
-        id: cc.id,
-        label: cc.label,
-        render: p => `<td style="font-size:11px;color:var(--g600)">${p[cc.id]||'—'}</td>`
-      });
-    }
-  });
-}
-function saveCustomCols() {
-  try { localStorage.setItem(STORAGE_CUSTOM_COLS, JSON.stringify(customCols)); } catch(e) {}
-}
-function addCustomCol(label) {
-  label = label.trim();
-  if (!label) return false;
-  // Generate a safe id from label
-  const id = 'custom_' + label.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_' + Date.now();
-  if (ALL_COLS.find(c => c.label.toLowerCase() === label.toLowerCase())) return 'dup';
-  const col = { id, label };
-  customCols.push(col);
-  ALL_COLS.push({
-    id,
-    label,
-    render: p => `<td style="font-size:11px;color:var(--g600)">${p[id]||'—'}</td>`
-  });
-  colOrder.push(id);
-  // Make it visible by default (not hidden)
-  saveCustomCols(); saveCols(); saveHiddenCols();
-  renderThead(); render();
-  return true;
-}
-function delCustomCol(id) {
-  if (!confirm('Remover a coluna "' + (customCols.find(c=>c.id===id)||{}).label + '"? Os dados desta coluna nos processos serão mantidos, mas ela não aparecerá mais na tabela.')) return;
-  customCols = customCols.filter(c => c.id !== id);
-  const idx = ALL_COLS.findIndex(c => c.id === id);
-  if (idx >= 0) ALL_COLS.splice(idx, 1);
-  colOrder = colOrder.filter(x => x !== id);
-  hiddenCols = hiddenCols.filter(x => x !== id);
-  saveCustomCols(); saveCols(); saveHiddenCols();
-  renderThead(); render(); renderColMgr();
-  showToast('Coluna removida.');
-}
 
 const ALL_COLS = [
   { id:'refCli',    label:'Ref. Cliente',   render: p=>`<td style="font-weight:700;color:var(--navy)">${p.refCli||'—'}</td>` },
@@ -1832,54 +1716,25 @@ function renderColMgr() {
     <p style="font-size:11px;color:var(--g500);margin-bottom:12px;line-height:1.5">
       Ative/desative colunas com o toggle. Arraste para reordenar — a ordem aqui é a ordem na tabela.
     </p>
-    <div class="cad-add-row" style="margin-bottom:14px">
-      <input id="cad-col-input" placeholder="Nome da nova coluna..." onkeydown="if(event.key==='Enter')cadAddCol()">
-      <button class="btn-cad-add" onclick="cadAddCol()">+ Adicionar</button>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;padding:10px;
+      background:var(--g50);border:1px solid var(--g200);border-radius:var(--r8)">
+      <input id="newcol-label" placeholder="Nome da nova coluna (ex: Nº DUE)"
+        style="width:100%;height:32px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r4);font-size:12px;outline:none">
+      <select id="newcol-field"
+        style="width:100%;height:32px;padding:0 9px;border:1px solid var(--g200);border-radius:var(--r4);font-size:12px;outline:none;background:#fff">
+        ${CUSTOM_FIELD_OPTIONS.map(f => `<option value="${f.id}">${f.label}</option>`).join('')}
+      </select>
+      <button class="btn-cad-add" onclick="addCustomCol()" style="width:100%">+ Adicionar Coluna</button>
     </div>
+
     <div id="col-mgr-list">
-      ${(()=>{
-        const mainIds = ['refCli','refAgil','cliente','cnpj','status','modal','navio','embarque','prevCheg','chegada','di','regDi','canal','desemb','produto','icms','cia','progresso','obs'];
-        let rows = '', shownSep = false;
-        for (const id of colOrder) {
-          const col = ALL_COLS.find(c=>c.id===id);
-          if (!col) continue;
-          if (!mainIds.includes(id) && !shownSep) {
-            shownSep = true;
-            rows += '<div style="font-size:10px;font-weight:600;color:var(--g400);text-transform:uppercase;letter-spacing:.05em;padding:10px 2px 4px">Colunas adicionais</div>';
-          }
-          const active = !hiddenCols.includes(id);
-          const isCustom = !!customCols.find(c=>c.id===id);
-          const delBtn = isCustom ? `<button onclick="delCustomCol('${id}')" title="Remover coluna" style="margin-left:6px;width:22px;height:22px;border:none;background:var(--rbg);color:var(--red);border-radius:4px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">×</button>` : '';
-          const item = ['<div class="col-mgr-item" draggable="true" data-cid="',id,'"',
-            ' ondragstart="cmDragStart(event)" ondragover="cmDragOver(event)"',
-            ' ondragleave="cmDragLeave(event)" ondrop="cmDrop(event)" ondragend="cmDragEnd(event)">',
-            '<span class="col-mgr-handle">⠿</span>',
-            '<span class="col-mgr-name">',col.label,'</span>',
-            '<label class="col-toggle">',
-            '<input type="checkbox" '+(active?'checked':'')+' onchange="toggleCol(\''+id+'\')">',
-            '<span class="col-toggle-slider"></span></label>',
-            delBtn,
-            '</div>'].join('');
-          rows += item;
-        }
-        return rows;
-      })()}
+      ${buildColMgrRows()}
     </div>
     <button onclick="resetCols()" style="margin-top:12px;width:100%;height:32px;border:1px solid var(--g200);
       background:#fff;border-radius:var(--r8);font-size:12px;color:var(--g600)">
       ↺ Restaurar ordem e visibilidade padrão
     </button>`;
-}
-
-function cadAddCol() {
-  const inp = document.getElementById('cad-col-input');
-  const label = (inp.value||'').trim();
-  if (!label) { inp.focus(); showToast('Informe o nome da coluna.'); return; }
-  const result = addCustomCol(label);
-  if (result === 'dup') { showToast('Já existe uma coluna com esse nome.'); return; }
-  inp.value = '';
-  renderColMgr();
-  showToast('✓ Coluna "' + label + '" adicionada!');
 }
 
 function resetCols() {
@@ -1920,6 +1775,133 @@ function cmDragEnd(e) {
   cmDragSrc = null;
 }
 
+
+function buildColMgrRows() {
+  const mainIds = ['refCli','refAgil','cliente','cnpj','status','modal','navio',
+    'embarque','prevCheg','chegada','di','regDi','canal','desemb','produto','icms','cia','progresso','obs'];
+  let rows = '', shownSep = false, shownCustomSep = false;
+  for (const id of colOrder) {
+    const col = ALL_COLS.find(c => c.id === id);
+    if (!col) continue;
+    const isCustom = id.startsWith('custom_');
+    if (!mainIds.includes(id) && !isCustom && !shownSep) {
+      shownSep = true;
+      rows += '<div style="font-size:10px;font-weight:600;color:var(--g400);text-transform:uppercase;letter-spacing:.05em;padding:10px 2px 4px;border-top:1px solid var(--g100);margin-top:4px">Colunas adicionais</div>';
+    }
+    if (isCustom && !shownCustomSep) {
+      shownCustomSep = true;
+      rows += '<div style="font-size:10px;font-weight:600;color:var(--g400);text-transform:uppercase;letter-spacing:.05em;padding:10px 2px 4px;border-top:1px solid var(--g100);margin-top:4px">Colunas personalizadas</div>';
+    }
+    const active = !hiddenCols.includes(id);
+    const chk = active ? 'checked' : '';
+    const delBtn = isCustom
+      ? '<button onclick="removeCustomCol(\'' + id + '\')" style="background:none;border:none;color:var(--g400);font-size:14px;cursor:pointer;padding:2px 6px;flex-shrink:0" title="Excluir coluna">×</button>'
+      : '';
+    rows += '<div class="col-mgr-item" draggable="true" data-cid="' + id + '"'
+      + ' ondragstart="cmDragStart(event)" ondragover="cmDragOver(event)"'
+      + ' ondragleave="cmDragLeave(event)" ondrop="cmDrop(event)" ondragend="cmDragEnd(event)">'
+      + '<span class="col-mgr-handle">⠿</span>'
+      + '<span class="col-mgr-name">' + col.label + (isCustom ? ' <span style="color:var(--g300);font-size:10px">(personalizada)</span>' : '') + '</span>'
+      + '<label class="col-toggle">'
+      + '<input type="checkbox" ' + chk + ' onchange="toggleCol(\'' + id + '\')">'
+      + '<span class="col-toggle-slider"></span>'
+      + '</label>'
+      + delBtn
+      + '</div>';
+  }
+  return rows;
+}
+
+
+// ── CUSTOM COLUMNS (user-added via "+ Adicionar Coluna") ──
+const STORAGE_CUSTOM_COLS = 'agil_custom_cols_v1';
+
+const CUSTOM_FIELD_OPTIONS = [
+  {id:'recebProc',  label:'Receb. Documentos'},
+  {id:'afrmm',      label:'AFRMM'},
+  {id:'presenca',   label:'Presença de Carga'},
+  {id:'scanner',    label:'Scanner Liberado'},
+  {id:'mapaLib',    label:'Mapa Liberação'},
+  {id:'espNF',      label:'Envio Espelho NF'},
+  {id:'glmeEntr',   label:'GLME Entrega'},
+  {id:'glmeLib',    label:'Liberação ICMS'},
+  {id:'daeICMS',    label:'DAE ICMS Envio'},
+  {id:'compICMS',   label:'Comprovante ICMS'},
+  {id:'recebNF',    label:'Receb. Nota Fiscal'},
+  {id:'envNFSis',   label:'Env. NF Siscoex'},
+  {id:'homSiscoex', label:'Homologação Siscoex'},
+  {id:'averbacao',  label:'Averbação'},
+  {id:'ceMercante', label:'CE Mercante'},
+  {id:'hbl',        label:'HBL / HAWB'},
+  {id:'pod',        label:'POD'},
+  {id:'containers', label:'Containers'},
+  {id:'consolidado',label:'Consolidado'},
+  {id:'retifDI',    label:'Retificação DI'},
+  {id:'confCE',     label:'Conferência CE'},
+  {id:'autReg',     label:'Autorização Registro'},
+  {id:'icmsDecl',   label:'ICMS Declarado'},
+  {id:'obs',        label:'Observações (duplicar)'},
+];
+
+let customCols = [];
+
+function loadCustomCols() {
+  try {
+    const s = localStorage.getItem(STORAGE_CUSTOM_COLS);
+    customCols = s ? JSON.parse(s) : [];
+  } catch(e) { customCols = []; }
+  // Register each custom col into ALL_COLS + colOrder if not already present
+  customCols.forEach(registerCustomCol);
+}
+function saveCustomCols() {
+  try { localStorage.setItem(STORAGE_CUSTOM_COLS, JSON.stringify(customCols)); } catch(e){}
+}
+function registerCustomCol(cc) {
+  if (ALL_COLS.find(c => c.id === cc.colId)) return; // already registered this session
+  ALL_COLS.push({
+    id: cc.colId,
+    label: cc.label,
+    render: p => `<td style="font-size:11px">${p[cc.field] || '—'}</td>`
+  });
+  if (!colOrder.includes(cc.colId)) colOrder.push(cc.colId);
+}
+
+function addCustomCol() {
+  const labelEl = document.getElementById('newcol-label');
+  const fieldEl = document.getElementById('newcol-field');
+  const label = (labelEl.value || '').trim();
+  const field = fieldEl.value;
+  if (!label) { labelEl.focus(); showToast('Informe o nome da coluna.'); return; }
+
+  const colId = 'custom_' + field + '_' + Date.now();
+  const cc = { colId, label, field };
+  customCols.push(cc);
+  saveCustomCols();
+  registerCustomCol(cc);
+  saveCols();
+
+  labelEl.value = '';
+  renderThead();
+  render();
+  renderColMgr();
+  showToast('✓ Coluna "' + label + '" adicionada!');
+}
+
+function removeCustomCol(colId) {
+  if (!confirm('Remover esta coluna personalizada?')) return;
+  customCols = customCols.filter(c => c.colId !== colId);
+  saveCustomCols();
+  colOrder = colOrder.filter(id => id !== colId);
+  hiddenCols = hiddenCols.filter(id => id !== colId);
+  const idx = ALL_COLS.findIndex(c => c.id === colId);
+  if (idx >= 0) ALL_COLS.splice(idx, 1);
+  saveCols(); saveHiddenCols();
+  renderThead();
+  render();
+  renderColMgr();
+  showToast('Coluna removida.');
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════════════════
@@ -1938,7 +1920,7 @@ document.getElementById('overlay').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape') { closeModal(); closePanel(); } });
 
-load(); loadCadastros(); loadStatusRules(); loadCols(); loadCustomCols(); loadHiddenCols(); populateSelects(); renderThead(); render();
+load(); loadCadastros(); loadStatusRules(); loadCols(); loadHiddenCols(); loadCustomCols(); populateSelects(); renderThead(); render();
 </script>
 
 <!-- CADASTROS PANEL -->
