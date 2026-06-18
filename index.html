@@ -954,7 +954,7 @@ function openEdit(id) {
 function renderForm(p) {
   const v = k => p ? (p[k]||'') : '';
   const impOptions = importadores.map(i =>
-    `<option value="${i}" ${v('cliente')===i?'selected':''}>${i}</option>`).join('');
+    `<option value="${i.nome}" ${v('cliente')===i.nome?'selected':''}>${i.nome}${i.cnpj?' — '+i.cnpj:''}</option>`).join('');
 
   document.getElementById('m-body').innerHTML = `<div class="fgrid">
     <div class="fsec">Identificação</div>
@@ -1080,6 +1080,10 @@ function acFilter() {
 function acSelect(val) {
   const input = document.getElementById('f-cliente');
   if (input) { input.value = val; }
+  // Preenche CNPJ automaticamente ao selecionar importador
+  const imp = importadores.find(i => i.nome === val);
+  const cnpjEl = document.getElementById('f-cnpj');
+  if (imp && cnpjEl) { cnpjEl.value = imp.cnpj || ''; }
   acClose();
 }
 function acClose() {
