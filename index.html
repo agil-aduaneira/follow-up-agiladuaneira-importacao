@@ -746,9 +746,9 @@ function renderKPIs() {
   const modalLabel = currentModal === 'mar' ? 'Marítimo' : 'Aéreo';
   const all    = procs.filter(p => !p.finalizado && (p.modalTransporte||'Marítimo') === modalLabel);
   const fin    = procs.filter(p => p.finalizado  && (p.modalTransporte||'Marítimo') === modalLabel);
-  const verde  = all.filter(p => p.canal==='Verde').length;
   const transit= all.filter(p => !p.chegada).length;
   const desp   = all.filter(p => !!p.desembaraco).length;
+  const agReg  = all.filter(p => !!p.chegada && !p.di).length;
   document.getElementById('kpis-area').innerHTML = `
     <div class="kpi"><div class="kpi-lbl">Em andamento</div><div class="kpi-val" style="color:var(--blue)">${all.length}</div><div class="kpi-sub">processos ativos</div></div>
     <div class="kpi"><div class="kpi-lbl">Em Trânsito</div><div class="kpi-val" style="color:var(--amber)">${transit}</div><div class="kpi-sub">ag. chegada</div></div>
