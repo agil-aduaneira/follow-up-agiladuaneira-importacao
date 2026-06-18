@@ -745,14 +745,16 @@ function renderKPIs() {
   const modalLabel = currentModal === 'mar' ? 'Marítimo' : 'Aéreo';
   const all    = procs.filter(p => !p.finalizado && (p.modalTransporte||'Marítimo') === modalLabel);
   const fin    = procs.filter(p => p.finalizado  && (p.modalTransporte||'Marítimo') === modalLabel);
-  const verde  = all.filter(p => p.canal==='Verde').length;
-  const transit= all.filter(p => !p.chegada).length;
-  const desp   = all.filter(p => !!p.desembaraco).length;
+  const verde   = all.filter(p => p.canal==='Verde').length;
+  const transit = all.filter(p => !p.chegada).length;
+  const desp    = all.filter(p => !!p.desembaraco).length;
+  const agReg   = all.filter(p => !!p.chegada && !p.di).length;
   document.getElementById('kpis-area').innerHTML = `
     <div class="kpi"><div class="kpi-lbl">Em andamento</div><div class="kpi-val" style="color:var(--blue)">${all.length}</div><div class="kpi-sub">processos ativos</div></div>
     <div class="kpi"><div class="kpi-lbl">Canal Verde</div><div class="kpi-val" style="color:var(--green)">${verde}</div><div class="kpi-sub">liberados</div></div>
     <div class="kpi"><div class="kpi-lbl">Em Trânsito</div><div class="kpi-val" style="color:var(--amber)">${transit}</div><div class="kpi-sub">ag. chegada</div></div>
     <div class="kpi"><div class="kpi-lbl">Desembaraçados</div><div class="kpi-val" style="color:var(--blue)">${desp}</div><div class="kpi-sub">este mês</div></div>
+    <div class="kpi" title="Chegada confirmada sem DI/DUIMP registrado"><div class="kpi-lbl">Ag. Registro</div><div class="kpi-val" style="color:var(--purple)">${agReg}</div><div class="kpi-sub">aguard. DI/DUIMP</div></div>
     <div class="kpi"><div class="kpi-lbl">Finalizados</div><div class="kpi-val" style="color:var(--green)">${fin.length}</div><div class="kpi-sub">processos</div></div>`;
 }
 
@@ -912,6 +914,17 @@ function openDetail(id) {
     <div class="di"><div class="dl">Env. NF Siscoex</div><div class="dv">${fv(p.envNFSis)}</div></div>
     <div class="di"><div class="dl">Homol. Siscoex</div><div class="dv">${fv(p.homSiscoex)}</div></div>
     <div class="di"><div class="dl">Averbação</div><div class="dv">${fv(p.averbacao)}</div></div>
+    ${(p.li||p.defLi||p.solicDesova||p.desova||p.shiva)?`
+    <div class="di full" style="background:var(--g50);border-radius:var(--r8);padding:8px 10px;margin-top:4px">
+      <div class="dl" style="font-weight:700;color:var(--navy);margin-bottom:6px">Licenças / Desova</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px 16px">
+        ${p.li?`<div><div class="dl">LI/LPCO</div><div class="dv">${fv(p.li)}</div></div>`:''}
+        ${p.defLi?`<div><div class="dl">Deferimento LI/LPCO</div><div class="dv">${fv(p.defLi)}</div></div>`:''}
+        ${p.solicDesova?`<div><div class="dl">Solic. Desova</div><div class="dv">${fv(p.solicDesova)}</div></div>`:''}
+        ${p.desova?`<div><div class="dl">Data da Desova</div><div class="dv">${fv(p.desova)}</div></div>`:''}
+        ${p.shiva?`<div><div class="dl">SHIVA Liberado</div><div class="dv">${fv(p.shiva)}</div></div>`:''}
+      </div>
+    </div>`:''}
     ${p.obs?`<div class="di full"><div class="dl">Observações</div><div class="dv" style="font-size:12px;line-height:1.5">${p.obs}</div></div>`:''}
   </div>`;
 
@@ -1039,6 +1052,13 @@ function renderForm(p) {
     <div class="fg"><label>Homol. Siscoex</label>    <input id="f-homSiscoex"   value="${v('homSiscoex')}"   placeholder="dd/mm/aaaa"></div>
     <div class="fg"><label>Averbação</label>         <input id="f-averbacao"    value="${v('averbacao')}"    placeholder="dd/mm/aaaa"></div>
 
+    <div class="fsec">Licenças / Desova</div>
+    <div class="fg"><label>LI / LPCO</label>           <input id="f-li"           value="${v('li')}"           placeholder="dd/mm/aaaa"></div>
+    <div class="fg"><label>Deferimento LI/LPCO</label> <input id="f-defLi"        value="${v('defLi')}"        placeholder="dd/mm/aaaa"></div>
+    <div class="fg"><label>Solic. Desova</label>        <input id="f-solicDesova"  value="${v('solicDesova')}"  placeholder="dd/mm/aaaa"></div>
+    <div class="fg"><label>Data da Desova</label>       <input id="f-desova"       value="${v('desova')}"       placeholder="dd/mm/aaaa"></div>
+    <div class="fg"><label>SHIVA Liberado</label>       <input id="f-shiva"        value="${v('shiva')}"        placeholder="dd/mm/aaaa"></div>
+
     <div class="fg full"><label>Observações</label><textarea id="f-obs">${v('obs')}</textarea></div>
   </div>`;
 
@@ -1049,6 +1069,13 @@ function renderForm(p) {
   // Setup autocomplete
   setTimeout(() => {
     document.addEventListener('click', acOutside);
+    // Fill CNPJ from importadores if the stored value is empty
+    const cliEl  = document.getElementById('f-cliente');
+    const cnpjEl = document.getElementById('f-cnpj');
+    if (cliEl && cnpjEl && cliEl.value && !cnpjEl.value) {
+      const imp = importadores.find(i => i.nome === cliEl.value);
+      if (imp && imp.cnpj) cnpjEl.value = imp.cnpj;
+    }
   }, 0);
 }
 
@@ -1110,18 +1137,30 @@ function saveProc() {
     'canal','di','consolidado','retifDI','navio','pod','hbl','ceMercante','containers',
     'recebProc','embarque','prevChegada','chegada','afrmm','presenca','scanner','mapaLib',
     'espNF','regDi','desembaraco','glmeEntr','glmeLib','daeICMS','compICMS',
-    'recebNF','envNFSis','homSiscoex','averbacao','obs'];
+    'recebNF','envNFSis','homSiscoex','averbacao',
+    'li','defLi','solicDesova','desova','shiva','obs'];
   const IDS  = ['f-refCli','f-refAgil','f-cliente','f-cnpj','f-modalTransporte','f-cia','f-produto','f-regimeICMS',
     'f-canal2','f-di','f-consolidado','f-retifDI','f-navio2','f-pod','f-hbl','f-ceMercante','f-containers',
     'f-recebProc','f-embarque','f-prevChegada','f-chegada','f-afrmm','f-presenca','f-scanner','f-mapaLib',
     'f-espNF','f-regDi','f-desembaraco','f-glmeEntr','f-glmeLib','f-daeICMS','f-compICMS',
-    'f-recebNF','f-envNFSis','f-homSiscoex','f-averbacao','f-obs'];
+    'f-recebNF','f-envNFSis','f-homSiscoex','f-averbacao',
+    'f-li','f-defLi','f-solicDesova','f-desova','f-shiva','f-obs'];
 
   const obj = {};
   KEYS.forEach((k,i) => { const el=document.getElementById(IDS[i]); if(el) obj[k]=el.value.trim(); });
 
   // Always register whatever was typed/selected
-  if (obj.cliente && obj.cliente.trim()) addImportador(obj.cliente.trim(), (obj.cnpj||'').trim());
+  if (obj.cliente && obj.cliente.trim()) {
+    addImportador(obj.cliente.trim(), (obj.cnpj||'').trim());
+    // Also update CNPJ on existing importador if it was empty
+    if (obj.cnpj && obj.cnpj.trim()) {
+      const existing = importadores.find(i => i.nome === obj.cliente.trim());
+      if (existing && !existing.cnpj) {
+        existing.cnpj = obj.cnpj.trim();
+        saveImportadores();
+      }
+    }
+  }
   if (obj.navio   && obj.navio.trim())   addNavio(obj.navio.trim());
   if (obj.cia     && obj.cia.trim())     addArmador(obj.cia.trim());
 
