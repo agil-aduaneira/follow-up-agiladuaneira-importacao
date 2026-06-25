@@ -1506,12 +1506,18 @@ function saveStatusRules() {
   try { localStorage.setItem(STORAGE_RULES, JSON.stringify(statusRules)); } catch(e) {}
 }
 
+// Retorna o valor de um campo para avaliação de regra de status
+function ruleFieldValue(p, field) {
+  // Campos de data do processo de importação — lidos direto (já são strings simples)
+  return (p[field] !== undefined && p[field] !== null) ? String(p[field]).trim() : '';
+}
+
 function calcStatusFromRules(p) {
   if (p.finalizado) return {key:'fin', label:'FINALIZADO', cls:'st-lib'};
 
-  // Check each rule in order
   for (const rule of statusRules) {
-    if (p[rule.field] && String(p[rule.field]).trim()) {
+    const val = ruleFieldValue(p, rule.field);
+    if (val && val !== '') {
       return {key: rule.field, label: rule.label, cls: rule.cls, attn: rule.attn||false};
     }
   }
@@ -1527,64 +1533,183 @@ function calcStatusFromRules(p) {
   return {key:'emb', label:'AG. EMBARQUE', cls:'st-emb'};
 }
 
-// Field display names for the rules editor
-const FIELD_LABELS = {
-  averbacao:   'Averbação',
-  homSiscoex:  'Homologação Siscoex',
-  envNFSis:    'Env. NF Siscoex',
-  recebNF:     'Receb. NF',
-  glmeLib:     'Lib. ICMS',
-  desembaraco: 'Desembaraço',
-  espNF:       'Envio Espelho NF',
-  regDi:       'Reg. DI/DUIMP',
-  di:          'Nº DI/DUIMP',
-  presenca:    'Presença de Carga',
-  chegada:     'Chegada',
-};
+// Retorna label legível de um field id
+function getFieldLabel(field) {
+  const FIXED = {
+    averbacao:'Averbação', homSiscoex:'Homologação Siscoex', envNFSis:'Env. NF Siscoex',
+    recebNF:'Receb. NF', glmeLib:'Lib. ICMS', desembaraco:'Desembaraço',
+    espNF:'Envio Espelho NF', regDi:'Reg. DI/DUIMP', di:'Nº DI/DUIMP',
+    presenca:'Presença de Carga', chegada:'Chegada', embarque:'Embarque',
+    prevChegada:'Prev. Chegada', navio:'Navio/Voo', cia:'CIA/Armador',
+    container:'Container', cnpj:'CNPJ', canal:'Canal', obs:'Observações',
+  };
+  if (FIXED[field]) return FIXED[field];
+  const cc = customCols.find(c => c.colId === field || c.field === field);
+  if (cc) return cc.label + ' (personalizada)';
+  return field;
+}
 
-const STATUS_LABELS = [
-  'AG. EMBARQUE','AG. CHEGADA','ENVIAR NUMERÁRIO ⚠','AG. PRESENÇA DE CARGA',
-  'AG. REGISTRO DI/DUIMP','ENVIAR ESPELHO DE NF','AG. LIBERAÇÃO DO ICMS',
-  'AG. NOTA FISCAL','AG. HOMOLOGAÇÃO DA NF','AG. AVERBAÇÃO','LIB. PARA CARREGAMENTO'
+// Paleta de cores
+const RULE_COLORS = [
+  {cls:'st-lib',   hex:'#1B8A5A', name:'Verde'},
+  {cls:'st-icms',  hex:'#0B7A75', name:'Teal'},
+  {cls:'st-espnf', hex:'#5B21B6', name:'Roxo'},
+  {cls:'st-regdi', hex:'#7D3C98', name:'Violeta'},
+  {cls:'st-pres',  hex:'#B85A0E', name:'Laranja'},
+  {cls:'st-cheg',  hex:'#B87A0E', name:'Âmbar'},
+  {cls:'st-emb',   hex:'#1155A3', name:'Azul'},
+  {cls:'st-num',   hex:'#C0392B', name:'Vermelho'},
+  {cls:'st-nf',    hex:'#1B8A5A', name:'Verde claro'},
+  {cls:'st-averb', hex:'#B8860B', name:'Dourado'},
 ];
-const STATUS_CLS = {
-  'AG. EMBARQUE':'st-emb','AG. CHEGADA':'st-cheg','ENVIAR NUMERÁRIO ⚠':'st-num',
-  'AG. PRESENÇA DE CARGA':'st-pres','AG. REGISTRO DI/DUIMP':'st-regdi',
-  'ENVIAR ESPELHO DE NF':'st-espnf','AG. LIBERAÇÃO DO ICMS':'st-icms',
-  'AG. NOTA FISCAL':'st-nf','AG. HOMOLOGAÇÃO DA NF':'st-homnf',
-  'AG. AVERBAÇÃO':'st-averb','LIB. PARA CARREGAMENTO':'st-lib'
-};
+
+// Todos os campos disponíveis para criar nova regra (importação)
+function getAvailableFields() {
+  const fixed = [
+    {id:'averbacao',    label:'Averbação'},
+    {id:'homSiscoex',   label:'Homologação Siscoex'},
+    {id:'envNFSis',     label:'Env. NF Siscoex'},
+    {id:'recebNF',      label:'Receb. NF'},
+    {id:'glmeLib',      label:'Lib. ICMS'},
+    {id:'desembaraco',  label:'Desembaraço'},
+    {id:'espNF',        label:'Envio Espelho NF'},
+    {id:'regDi',        label:'Reg. DI/DUIMP'},
+    {id:'di',           label:'Nº DI/DUIMP'},
+    {id:'presenca',     label:'Presença de Carga'},
+    {id:'chegada',      label:'Chegada'},
+    {id:'embarque',     label:'Embarque'},
+    {id:'prevChegada',  label:'Prev. Chegada'},
+    {id:'canal',        label:'Canal'},
+    {id:'navio',        label:'Navio/Voo'},
+    {id:'container',    label:'Container'},
+    {id:'afrmm',        label:'AFRMM'},
+    {id:'ceMercante',   label:'CE Mercante'},
+    {id:'scanner',      label:'Scanner Lib.'},
+    {id:'daeICMS',      label:'DAE ICMS'},
+    {id:'obs',          label:'Observações'},
+  ];
+  const custom = customCols.map(cc => ({id: cc.colId, label: cc.label + ' (personalizada)'}));
+  return [...fixed, ...custom];
+}
 
 function renderRulesTab() {
   const body = document.getElementById('cad-body');
+  const fieldsOpts = getAvailableFields().map(f =>
+    `<option value="${f.id}">${f.label}</option>`).join('');
+  const colorSwatches = RULE_COLORS.map((c,i) =>
+    `<label title="${c.name}" style="cursor:pointer">
+      <input type="radio" name="nr-color" value="${c.cls}" ${i===0?'checked':''} style="display:none">
+      <span style="display:inline-block;width:20px;height:20px;border-radius:50%;background:${c.hex};
+        border:2px solid transparent;transition:.15s" onclick="this.style.borderColor='#000'"></span>
+    </label>`).join('');
+
+  const STATUS_LABELS_IMP = [
+    'AG. EMBARQUE','AG. CHEGADA','ENVIAR NUMERÁRIO ⚠','AG. PRESENÇA DE CARGA',
+    'AG. REGISTRO DI/DUIMP','ENVIAR ESPELHO DE NF','AG. LIBERAÇÃO DO ICMS',
+    'AG. NOTA FISCAL','AG. HOMOLOGAÇÃO DA NF','AG. AVERBAÇÃO','LIB. PARA CARREGAMENTO'
+  ];
+  const STATUS_CLS_IMP = {
+    'AG. EMBARQUE':'st-emb','AG. CHEGADA':'st-cheg','ENVIAR NUMERÁRIO ⚠':'st-num',
+    'AG. PRESENÇA DE CARGA':'st-pres','AG. REGISTRO DI/DUIMP':'st-regdi',
+    'ENVIAR ESPELHO DE NF':'st-espnf','AG. LIBERAÇÃO DO ICMS':'st-icms',
+    'AG. NOTA FISCAL':'st-nf','AG. HOMOLOGAÇÃO DA NF':'st-homnf',
+    'AG. AVERBAÇÃO':'st-averb','LIB. PARA CARREGAMENTO':'st-lib'
+  };
+
   body.innerHTML = `
-    <p style="font-size:11px;color:var(--g500);margin-bottom:12px;line-height:1.5">
-      Configure aqui qual campo aciona qual status. A ordem importa — a primeira regra com o campo preenchido é aplicada.
+    <p style="font-size:11px;color:var(--g500);margin-bottom:10px;line-height:1.5">
+      Configure qual campo aciona qual status. A ordem importa — a primeira regra com o campo preenchido é aplicada.
     </p>
+
+    <!-- FORMULÁRIO NOVA REGRA -->
+    <div style="background:var(--pale);border:1px solid var(--blue);border-radius:var(--r8);padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--navy);margin-bottom:8px">+ Nova Regra</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div>
+          <div style="font-size:10px;color:var(--g500);margin-bottom:3px">Campo que dispara a regra</div>
+          <select id="nr-field" style="width:100%;height:30px;padding:0 8px;border:1px solid var(--g200);
+            border-radius:var(--r4);font-size:12px;background:#fff;outline:none">
+            ${fieldsOpts}
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--g500);margin-bottom:3px">Nome do status exibido</div>
+          <input id="nr-label" placeholder="Ex: EM ANÁLISE ESPECIAL"
+            style="width:100%;height:30px;padding:0 8px;border:1px solid var(--g200);
+            border-radius:var(--r4);font-size:12px;outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--g500);margin-bottom:5px">Cor do badge</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap" id="nr-colors">${colorSwatches}</div>
+        </div>
+        <button onclick="addCustomRule()"
+          style="height:32px;background:var(--navy);color:#fff;border:none;border-radius:var(--r8);
+          font-size:12px;font-weight:600;cursor:pointer">+ Adicionar Regra</button>
+      </div>
+    </div>
+
+    <!-- LISTA DE REGRAS -->
     <div style="display:flex;flex-direction:column;gap:8px" id="rules-list">
-      ${statusRules.map((r,i) => `
+      ${statusRules.map((r,i) => {
+        const isDefault = i < DEFAULT_RULES.length && !r.custom;
+        const previewStyle = `display:inline-flex;align-items:center;border-radius:20px;padding:2px 10px;font-size:10px;font-weight:700`;
+        return `
         <div style="background:var(--g50);border:1px solid var(--g200);border-radius:var(--r8);padding:10px 12px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <span style="background:var(--navy);color:rgba(255,255,255,.6);border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${i+1}</span>
-            <div style="flex:1;font-size:11px;color:var(--g500)">Quando <strong style="color:var(--navy)">${FIELD_LABELS[r.field]||r.field}</strong> for preenchido:</div>
+            <span style="background:var(--navy);color:rgba(255,255,255,.6);border-radius:50%;width:20px;height:20px;
+              display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0">${i+1}</span>
+            <div style="flex:1;font-size:11px;color:var(--g500)">
+              Quando <strong style="color:var(--navy)">${getFieldLabel(r.field)}</strong> for preenchido:
+            </div>
             <div style="display:flex;gap:4px">
               ${i>0?`<button onclick="ruleMove(${i},-1)" style="width:22px;height:22px;border:1px solid var(--g200);background:#fff;border-radius:var(--r4);font-size:12px;cursor:pointer" title="Subir">↑</button>`:'<span style="width:22px"></span>'}
               ${i<statusRules.length-1?`<button onclick="ruleMove(${i},1)" style="width:22px;height:22px;border:1px solid var(--g200);background:#fff;border-radius:var(--r4);font-size:12px;cursor:pointer" title="Descer">↓</button>`:'<span style="width:22px"></span>'}
-              <button onclick="ruleReset(${i})" style="width:22px;height:22px;border:1px solid var(--g200);background:#fff;border-radius:var(--r4);font-size:10px;cursor:pointer;color:var(--g400)" title="Restaurar padrão">↺</button>
+              ${isDefault
+                ? `<button onclick="ruleReset(${i})" style="width:22px;height:22px;border:1px solid var(--g200);background:#fff;border-radius:var(--r4);font-size:10px;cursor:pointer;color:var(--g400)" title="Restaurar padrão">↺</button>`
+                : `<button onclick="removeCustomRule(${i})" style="width:22px;height:22px;border:1px solid var(--rbg);background:var(--rbg);border-radius:var(--r4);font-size:13px;cursor:pointer;color:var(--red)" title="Excluir regra">×</button>`
+              }
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:10px;color:var(--g400)">Status →</span>
-            <select onchange="ruleChangeLabel(${i}, this.value)"
-              style="flex:1;height:28px;font-size:11px;font-weight:600;padding:0 6px;border:1px solid var(--g200);border-radius:var(--r4);color:var(--g800);background:#fff;outline:none">
-              ${STATUS_LABELS.map(sl => `<option value="${sl}" ${r.label===sl?'selected':''}>${sl}</option>`).join('')}
-            </select>
+            ${isDefault
+              ? `<select onchange="ruleChangeLabel(${i}, this.value)"
+                  style="flex:1;height:28px;font-size:11px;font-weight:600;padding:0 6px;border:1px solid var(--g200);border-radius:var(--r4);color:var(--g800);background:#fff;outline:none">
+                  ${STATUS_LABELS_IMP.map(sl => `<option value="${sl}" ${r.label===sl?'selected':''}>${sl}</option>`).join('')}
+                </select>`
+              : `<span class="stb ${r.cls||'st-emb'}" style="${previewStyle}">${r.label}</span>
+                 <span style="font-size:10px;color:var(--g400);margin-left:4px">(regra personalizada)</span>`
+            }
           </div>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>
     <div style="display:flex;gap:8px;margin-top:12px">
-      <button onclick="rulesReset()" style="flex:1;height:32px;border:1px solid var(--g200);background:#fff;border-radius:var(--r8);font-size:12px;color:var(--g600)">↺ Restaurar padrão</button>
+      <button onclick="rulesReset()" style="flex:1;height:32px;border:1px solid var(--g200);background:#fff;border-radius:var(--r8);font-size:12px;color:var(--g600)">↺ Restaurar padrão (remove regras customizadas)</button>
     </div>`;
+}
+
+function addCustomRule() {
+  const fieldEl = document.getElementById('nr-field');
+  const labelEl = document.getElementById('nr-label');
+  const colorEl = document.querySelector('input[name="nr-color"]:checked');
+  const field = fieldEl ? fieldEl.value : '';
+  const label = (labelEl ? labelEl.value : '').trim().toUpperCase();
+  const cls   = colorEl ? colorEl.value : 'st-emb';
+  if (!field) { showToast('Selecione um campo.'); return; }
+  if (!label) { labelEl.focus(); showToast('Informe o nome do status.'); return; }
+  statusRules.push({ field, label, cls, custom: true });
+  saveStatusRules();
+  if (labelEl) labelEl.value = '';
+  renderRulesTab(); render();
+  showToast('✓ Regra "' + label + '" adicionada!');
+}
+
+function removeCustomRule(i) {
+  if (!confirm('Excluir a regra "' + statusRules[i].label + '"?')) return;
+  statusRules.splice(i, 1);
+  saveStatusRules(); renderRulesTab(); render();
+  showToast('Regra excluída.');
 }
 
 function ruleMove(i, dir) {
@@ -1596,20 +1721,28 @@ function ruleMove(i, dir) {
 }
 function ruleChangeLabel(i, newLabel) {
   statusRules[i].label = newLabel;
-  statusRules[i].cls = STATUS_CLS[newLabel] || 'st-emb';
+  const STATUS_CLS_MAP = {
+    'AG. EMBARQUE':'st-emb','AG. CHEGADA':'st-cheg','ENVIAR NUMERÁRIO ⚠':'st-num',
+    'AG. PRESENÇA DE CARGA':'st-pres','AG. REGISTRO DI/DUIMP':'st-regdi',
+    'ENVIAR ESPELHO DE NF':'st-espnf','AG. LIBERAÇÃO DO ICMS':'st-icms',
+    'AG. NOTA FISCAL':'st-nf','AG. HOMOLOGAÇÃO DA NF':'st-homnf',
+    'AG. AVERBAÇÃO':'st-averb','LIB. PARA CARREGAMENTO':'st-lib'
+  };
+  statusRules[i].cls = STATUS_CLS_MAP[newLabel] || statusRules[i].cls || 'st-emb';
   saveStatusRules(); render();
   showToast('✓ Regra atualizada!');
 }
 function ruleReset(i) {
-  if (DEFAULT_RULES[i]) { statusRules[i] = {...DEFAULT_RULES[i]}; saveStatusRules(); renderRulesTab(); render(); showToast('Regra restaurada.'); }
+  if (i < DEFAULT_RULES.length) {
+    statusRules[i] = {...DEFAULT_RULES[i]};
+    saveStatusRules(); renderRulesTab(); render(); showToast('Regra restaurada.');
+  }
 }
 function rulesReset() {
-  if (!confirm('Restaurar todas as regras para o padrão?')) return;
+  if (!confirm('Restaurar padrão? As regras personalizadas serão removidas.')) return;
   statusRules = JSON.parse(JSON.stringify(DEFAULT_RULES));
   saveStatusRules(); renderRulesTab(); render(); showToast('✓ Regras restauradas.');
 }
-
-
 // ═══════════════════════════════════════════════════════════════
 //  COLUMN SYSTEM
 // ═══════════════════════════════════════════════════════════════
